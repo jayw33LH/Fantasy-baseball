@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>⚾ MLB Luck Analyzer</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --lucky: #3fb950;
+      --unlucky: #f85149;
+      --neutral: #58a6ff;
+      --lucky-bg: rgba(63, 185, 80, 0.08);
+      --unlucky-bg: rgba(248, 81, 73, 0.08);
+      --radius: 8px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+    header h1 span { color: var(--lucky); }
+
+    .header-meta {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    #last-updated { font-size: 12px; }
+
+    button {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 14px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-size: 13px;
+      transition: background 0.15s;
+    }
+    button:hover { background: #21262d; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.primary {
+      background: var(--neutral);
+      border-color: var(--neutral);
+      color: #000;
+      font-weight: 600;
+    }
+    button.primary:hover { background: #79c0ff; }
+
+    /* ── Tab Bar ── */
+    .tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      background: var(--surface);
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--muted);
+      padding: 10px 20px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      border-radius: 0;
+    }
+    .tab-btn:hover { color: var(--text); background: transparent; }
+    .tab-btn.active {
+      color: var(--text);
+      border-bottom-color: var(--neutral);
+    }
+
+    /* ── Main Layout ── */
+    main { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+    /* ── Status Banner ── */
+    #status-banner {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 20px;
+      margin-bottom: 20px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid var(--border);
+      border-top-color: var(--neutral);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Luck Grid ── */
+    .luck-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    @media (max-width: 768px) { .luck-grid { grid-template-columns: 1fr; } }
+
+    .luck-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .luck-card-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .luck-card-header.lucky { color: var(--lucky); }
+    .luck-card-header.unlucky { color: var(--unlucky); }
+
+    .luck-card-header .badge {
+      margin-left: auto;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-weight: 500;
+    }
+    .lucky .badge { background: var(--lucky-bg); color: var(--lucky); }
+    .unlucky .badge { background: var(--unlucky-bg); color: var(--unlucky); }
+
+    /* ── Table ── */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .data-table th {
+      padding: 8px 12px;
+      text-align: left;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border);
+      background: #0d1117;
+    }
+    .data-table th.right { text-align: right; }
+
+    .data-table td {
+      padding: 9px 12px;
+      border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+      font-size: 13px;
+    }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+    .data-table td.right { text-align: right; font-family: monospace; }
+    .data-table td.name { font-weight: 500; }
+
+    .rank { color: var(--muted); font-size: 12px; width: 28px; }
+
+    .luck-val.positive { color: var(--lucky); font-family: monospace; font-weight: 600; }
+    .luck-val.negative { color: var(--unlucky); font-family: monospace; font-weight: 600; }
+
+    .pill {
+      display: inline-block;
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .pill.lucky { background: var(--lucky-bg); color: var(--lucky); }
+    .pill.unlucky { background: var(--unlucky-bg); color: var(--unlucky); }
+
+    /* ── Search ── */
+    .search-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 28px;
+    }
+
+    .search-section label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 10px;
+      color: var(--muted);
+    }
+
+    .search-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+    input[type="text"], select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 7px 12px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      outline: none;
+    }
+    input[type="text"] { width: 260px; }
+    input[type="text"]:focus, select:focus { border-color: var(--neutral); }
+
+    #search-results {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 10px;
+    }
+
+    .search-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+    }
+    .search-card .sc-name { font-weight: 600; margin-bottom: 6px; }
+    .search-card .sc-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+    .search-card .sc-row span:last-child { color: var(--text); font-family: monospace; }
+
+    /* ── Screenshot Analyzer ── */
+    .analyzer-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .analyzer-header {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+      font-size: 15px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .analyzer-body { padding: 20px; }
+
+    .dropzone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 40px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+    }
+    .dropzone:hover, .dropzone.drag-over {
+      border-color: var(--neutral);
+      background: rgba(88, 166, 255, 0.05);
+    }
+    .dropzone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+    .dropzone-icon { font-size: 36px; margin-bottom: 12px; }
+    .dropzone-text { color: var(--muted); font-size: 14px; }
+    .dropzone-text strong { color: var(--neutral); }
+    .dropzone-preview { max-height: 200px; max-width: 100%; border-radius: 6px; margin-top: 12px; }
+
+    .context-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+
+    .context-row label { font-size: 13px; color: var(--muted); white-space: nowrap; }
+
+    #analyze-btn { margin-top: 14px; }
+
+    /* ── Analysis Results ── */
+    #analysis-results { margin-top: 20px; }
+
+    .results-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+    @media (max-width: 600px) { .results-grid { grid-template-columns: 1fr; } }
+
+    .result-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+    }
+    .result-card .rc-name { font-weight: 600; font-size: 13px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+    .result-card .rc-type { font-size: 11px; color: var(--muted); font-weight: 400; }
+    .result-card .rc-stat { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .result-card .rc-stat span:last-child { color: var(--text); font-family: monospace; }
+
+    .no-match { color: var(--muted); font-style: italic; font-size: 12px; }
+
+    .analysis-text {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      line-height: 1.7;
+      font-size: 14px;
+      white-space: pre-wrap;
+    }
+
+    .analysis-text strong { color: var(--text); font-weight: 600; }
+
+    .error-box {
+      background: rgba(248, 81, 73, 0.08);
+      border: 1px solid rgba(248, 81, 73, 0.3);
+      color: var(--unlucky);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      font-size: 13px;
+    }
+
+    /* ── Explanation Bar ── */
+    .explainer {
+      background: rgba(88, 166, 255, 0.06);
+      border: 1px solid rgba(88, 166, 255, 0.2);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 16px;
+      line-height: 1.6;
+    }
+    .explainer strong { color: var(--neutral); }
+
+    /* ── Tab Panels ── */
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── Responsive table scroll ── */
+    .table-wrap { overflow-x: auto; }
+
+    /* Markdown bold in analysis */
+    .analysis-text b { color: var(--text); }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>⚾ MLB <span>Luck</span> Analyzer</h1>
+  <div class="header-meta">
+    <span id="last-updated">Loading...</span>
+    <button id="refresh-btn" onclick="loadLuckData(true)">↻ Refresh</button>
+  </div>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('batters', this)">🏏 Batters</button>
+  <button class="tab-btn" onclick="switchTab('pitchers', this)">⚾ Pitchers</button>
+  <button class="tab-btn" onclick="switchTab('search', this)">🔍 Search Player</button>
+  <button class="tab-btn" onclick="switchTab('analyzer', this)">📸 Screenshot Analyzer</button>
+</div>
+
+<main>
+
+  <div id="status-banner">
+    <span class="spinner"></span>
+    <span id="status-msg">Fetching live data from Baseball Savant…</span>
+  </div>
+
+  <!-- ── BATTERS TAB ── -->
+  <div class="tab-panel active" id="tab-batters">
+    <div class="explainer">
+      <strong>How batter luck works:</strong> Luck Score = wOBA − xwOBA (expected).
+      <strong style="color:var(--lucky)">Positive = lucky</strong> (getting more than their contact quality deserves — expect regression, sell high).
+      <strong style="color:var(--unlucky)">Negative = unlucky</strong> (getting less than deserved — expect improvement, buy low).
+      Min 100 PA.
+    </div>
+    <div class="luck-grid" id="batters-grid">
+      <div class="luck-card">
+        <div class="luck-card-header lucky">🍀 Luckiest Batters <span class="badge">Sell High</span></div>
+        <div class="table-wrap"><table class="data-table" id="lucky-batters-table"></table></div>
+      </div>
+      <div class="luck-card">
+        <div class="luck-card-header unlucky">💀 Unluckiest Batters <span class="badge">Buy Low</span></div>
+        <div class="table-wrap"><table class="data-table" id="unlucky-batters-table"></table></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PITCHERS TAB ── -->
+  <div class="tab-panel" id="tab-pitchers">
+    <div class="explainer">
+      <strong>How pitcher luck works:</strong> Luck Score = xERA − ERA.
+      <strong style="color:var(--lucky)">Positive = lucky</strong> (ERA lower than underlying quality — expect regression, fade/sell).
+      <strong style="color:var(--unlucky)">Negative = unlucky</strong> (ERA higher than deserved — expect improvement, stream/buy).
+      Min 100 batters faced.
+    </div>
+    <div class="luck-grid">
+      <div class="luck-card">
+        <div class="luck-card-header lucky">🍀 Luckiest Pitchers <span class="badge">Fade / Sell</span></div>
+        <div class="table-wrap"><table class="data-table" id="lucky-pitchers-table"></table></div>
+      </div>
+      <div class="luck-card">
+        <div class="luck-card-header unlucky">💀 Unluckiest Pitchers <span class="badge">Stream / Buy</span></div>
+        <div class="table-wrap"><table class="data-table" id="unlucky-pitchers-table"></table></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SEARCH TAB ── -->
+  <div class="tab-panel" id="tab-search">
+    <div class="search-section">
+      <label>Search any MLB player for their current luck profile</label>
+      <div class="search-row">
+        <input type="text" id="search-input" placeholder="e.g. Mike Trout, Shohei Ohtani…" oninput="debounceSearch(this.value)" />
+        <select id="search-type-filter" onchange="debounceSearch(document.getElementById('search-input').value)">
+          <option value="all">All Players</option>
+          <option value="batter">Batters Only</option>
+          <option value="pitcher">Pitchers Only</option>
+        </select>
+      </div>
+      <div id="search-results"></div>
+    </div>
+  </div>
+
+  <!-- ── SCREENSHOT ANALYZER TAB ── -->
+  <div class="tab-panel" id="tab-analyzer">
+    <div class="analyzer-section">
+      <div class="analyzer-header">
+        📸 Fantasy Roster Screenshot Analyzer
+        <span style="font-size:12px;color:var(--muted);font-weight:400;margin-left:8px;">
+          Upload a screenshot — AI reads your roster and returns luck analysis
+        </span>
+      </div>
+      <div class="analyzer-body">
+
+        <div class="dropzone" id="dropzone">
+          <input type="file" id="file-input" accept="image/*" onchange="handleFileSelect(this)" />
+          <div class="dropzone-icon">📷</div>
+          <div class="dropzone-text">
+            <strong>Click to upload</strong> or drag & drop<br/>
+            Screenshot of your roster, free agents, or opponent roster
+          </div>
+          <img id="preview-img" class="dropzone-preview" style="display:none" />
+        </div>
+
+        <div class="context-row">
+          <label for="context-select">Screenshot is:</label>
+          <select id="context-select">
+            <option value="my fantasy roster">My Fantasy Roster</option>
+            <option value="available free agents in my fantasy league">Free Agents</option>
+            <option value="an opponent's fantasy roster">Opponent's Roster</option>
+            <option value="a list of players I'm considering trading for">Trade Targets</option>
+            <option value="players I'm considering dropping">Drop Candidates</option>
+          </select>
+        </div>
+
+        <button id="analyze-btn" class="primary" onclick="analyzeScreenshot()" disabled>
+          Analyze Screenshot
+        </button>
+
+        <div id="analysis-results"></div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  // ── State ──
+  let allBatters = [];
+  let allPitchers = [];
+  let searchDebounce = null;
+  let selectedFile = null;
+
+  // ── Tab switching ──
+  function switchTab(name, btn) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    btn.classList.add('active');
+  }
+
+  // ── Load luck data ──
+  async function loadLuckData(forceRefresh = false) {
+    showStatus('Fetching live data from Baseball Savant… (first load may take 30–60s)');
+    document.getElementById('refresh-btn').disabled = true;
+
+    try {
+      const res = await fetch('/api/luck-data' + (forceRefresh ? '?refresh=true' : ''));
+      const data = await res.json();
+
+      if (data.error) {
+        showStatus('Error: ' + data.error, true);
+        return;
+      }
+
+      allBatters = data.batters || [];
+      allPitchers = data.pitchers || [];
+
+      renderBatterTables();
+      renderPitcherTables();
+
+      const ts = data.last_updated ? new Date(data.last_updated).toLocaleString() : 'unknown';
+      const srcIcon = data.is_demo ? '🔶 Demo' : (data.cached ? '📦 Cached' : '🟢 Live');
+      document.getElementById('last-updated').textContent =
+        srcIcon + ' · Updated ' + ts +
+        ' · ' + allBatters.length + ' batters / ' + allPitchers.length + ' pitchers';
+
+      if (data.is_demo) {
+        showStatus('⚠️ ' + (data.demo_reason || 'Using demo data') + ' — on your machine with network access this will show live Baseball Savant data.', true);
+      }
+
+      hideStatus();
+    } catch (err) {
+      showStatus('Failed to load data: ' + err.message, true);
+    } finally {
+      document.getElementById('refresh-btn').disabled = false;
+    }
+  }
+
+  function showStatus(msg, isError = false) {
+    const banner = document.getElementById('status-banner');
+    banner.style.display = 'block';
+    banner.style.color = isError ? 'var(--unlucky)' : 'var(--muted)';
+    banner.innerHTML = isError
+      ? '⚠️ ' + msg
+      : '<span class="spinner"></span><span>' + msg + '</span>';
+  }
+
+  function hideStatus() {
+    document.getElementById('status-banner').style.display = 'none';
+  }
+
+  // ── Table rendering ──
+  function batterHeaders() {
+    return `<thead><tr>
+      <th class="rank">#</th>
+      <th>Player</th>
+      <th class="right">PA</th>
+      <th class="right">wOBA</th>
+      <th class="right">xwOBA</th>
+      <th class="right">Luck Score</th>
+      <th>Signal</th>
+    </tr></thead>`;
+  }
+
+  function pitcherHeaders() {
+    return `<thead><tr>
+      <th class="rank">#</th>
+      <th>Player</th>
+      <th class="right">PA</th>
+      <th class="right">ERA</th>
+      <th class="right">xERA</th>
+      <th class="right">Luck Score</th>
+      <th>Signal</th>
+    </tr></thead>`;
+  }
+
+  function renderBatterRow(p, rank, isLucky) {
+    const score = p.luck_score;
+    const scoreClass = score > 0 ? 'positive' : 'negative';
+    const sign = score > 0 ? '+' : '';
+    const pill = isLucky
+      ? '<span class="pill lucky">Lucky</span>'
+      : '<span class="pill unlucky">Unlucky</span>';
+    const woba = p.woba != null ? p.woba.toFixed(3) : '—';
+    const xwoba = p.xwoba != null ? p.xwoba.toFixed(3) : '—';
+    const pa = p.pa != null ? p.pa : '—';
+    return `<tr>
+      <td class="rank right">${rank}</td>
+      <td class="name">${p.name}</td>
+      <td class="right">${pa}</td>
+      <td class="right">${woba}</td>
+      <td class="right">${xwoba}</td>
+      <td class="right luck-val ${scoreClass}">${sign}${score.toFixed(3)}</td>
+      <td>${pill}</td>
+    </tr>`;
+  }
+
+  function renderPitcherRow(p, rank, isLucky) {
+    const score = p.luck_score;
+    const scoreClass = score > 0 ? 'positive' : 'negative';
+    const sign = score > 0 ? '+' : '';
+    const pill = isLucky
+      ? '<span class="pill lucky">Lucky</span>'
+      : '<span class="pill unlucky">Unlucky</span>';
+
+    // Pitchers might have era/xera or woba/xwoba depending on data available
+    let stat1 = '—', stat2 = '—';
+    if (p.era != null && p.xera != null) {
+      stat1 = p.era.toFixed(2); stat2 = p.xera.toFixed(2);
+    } else if (p.woba != null && p.xwoba != null) {
+      stat1 = p.woba.toFixed(3); stat2 = p.xwoba.toFixed(3);
+    }
+    const pa = p.pa != null ? p.pa : '—';
+
+    return `<tr>
+      <td class="rank right">${rank}</td>
+      <td class="name">${p.name}</td>
+      <td class="right">${pa}</td>
+      <td class="right">${stat1}</td>
+      <td class="right">${stat2}</td>
+      <td class="right luck-val ${scoreClass}">${sign}${score.toFixed(3)}</td>
+      <td>${pill}</td>
+    </tr>`;
+  }
+
+  function renderBatterTables() {
+    const top25Lucky = [...allBatters].sort((a, b) => b.luck_score - a.luck_score).slice(0, 25);
+    const top25Unlucky = [...allBatters].sort((a, b) => a.luck_score - b.luck_score).slice(0, 25);
+
+    const lt = document.getElementById('lucky-batters-table');
+    lt.innerHTML = batterHeaders() + '<tbody>' +
+      top25Lucky.map((p, i) => renderBatterRow(p, i + 1, true)).join('') +
+      '</tbody>';
+
+    const ut = document.getElementById('unlucky-batters-table');
+    ut.innerHTML = batterHeaders() + '<tbody>' +
+      top25Unlucky.map((p, i) => renderBatterRow(p, i + 1, false)).join('') +
+      '</tbody>';
+  }
+
+  function renderPitcherTables() {
+    const top25Lucky = [...allPitchers].sort((a, b) => b.luck_score - a.luck_score).slice(0, 25);
+    const top25Unlucky = [...allPitchers].sort((a, b) => a.luck_score - b.luck_score).slice(0, 25);
+
+    const pitcherHdr = pitcherHeaders();
+
+    const lt = document.getElementById('lucky-pitchers-table');
+    lt.innerHTML = pitcherHdr + '<tbody>' +
+      top25Lucky.map((p, i) => renderPitcherRow(p, i + 1, true)).join('') +
+      '</tbody>';
+
+    const ut = document.getElementById('unlucky-pitchers-table');
+    ut.innerHTML = pitcherHdr + '<tbody>' +
+      top25Unlucky.map((p, i) => renderPitcherRow(p, i + 1, false)).join('') +
+      '</tbody>';
+  }
+
+  // ── Search ──
+  function debounceSearch(query) {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => doSearch(query), 200);
+  }
+
+  function findPlayerByQuery(query, players) {
+    const q = query.toLowerCase().trim();
+    return players.filter(p => p.name.toLowerCase().includes(q));
+  }
+
+  function doSearch(query) {
+    const container = document.getElementById('search-results');
+    if (!query || query.length < 2) { container.innerHTML = ''; return; }
+
+    const typeFilter = document.getElementById('search-type-filter').value;
+    let results = [];
+
+    if (typeFilter !== 'pitcher') {
+      findPlayerByQuery(query, allBatters).forEach(p => results.push({ ...p, _type: 'batter' }));
+    }
+    if (typeFilter !== 'batter') {
+      findPlayerByQuery(query, allPitchers).forEach(p => results.push({ ...p, _type: 'pitcher' }));
+    }
+
+    // Dedupe by name, prefer batter if dup
+    const seen = new Set();
+    results = results.filter(p => {
+      if (seen.has(p.name)) return false;
+      seen.add(p.name); return true;
+    });
+
+    if (!results.length) {
+      container.innerHTML = '<p style="color:var(--muted);padding:8px 0;font-size:13px;">No players found</p>';
+      return;
+    }
+
+    container.innerHTML = results.slice(0, 20).map(p => {
+      const score = p.luck_score;
+      const sign = score > 0 ? '+' : '';
+      const scoreColor = score > 0 ? 'var(--lucky)' : (score < 0 ? 'var(--unlucky)' : 'var(--muted)');
+      const signal = Math.abs(score) < 0.01 ? 'Neutral' : (score > 0 ? '🍀 Lucky' : '💀 Unlucky');
+
+      let statRows = '';
+      if (p._type === 'batter') {
+        if (p.woba != null) statRows += `<div class="sc-row"><span>wOBA</span><span>${p.woba.toFixed(3)}</span></div>`;
+        if (p.xwoba != null) statRows += `<div class="sc-row"><span>xwOBA</span><span>${p.xwoba.toFixed(3)}</span></div>`;
+      } else {
+        if (p.era != null) statRows += `<div class="sc-row"><span>ERA</span><span>${p.era.toFixed(2)}</span></div>`;
+        if (p.xera != null) statRows += `<div class="sc-row"><span>xERA</span><span>${p.xera.toFixed(2)}</span></div>`;
+        if (!p.era && p.woba != null) statRows += `<div class="sc-row"><span>wOBA allowed</span><span>${p.woba.toFixed(3)}</span></div>`;
+        if (!p.xera && p.xwoba != null) statRows += `<div class="sc-row"><span>xwOBA allowed</span><span>${p.xwoba.toFixed(3)}</span></div>`;
+      }
+      if (p.pa != null) statRows += `<div class="sc-row"><span>PA</span><span>${p.pa}</span></div>`;
+
+      return `<div class="search-card">
+        <div class="sc-name">${p.name} <span style="font-size:11px;color:var(--muted);font-weight:400;">${p._type}</span></div>
+        ${statRows}
+        <div class="sc-row"><span>Luck Score</span><span style="color:${scoreColor};font-weight:600">${sign}${score.toFixed(3)}</span></div>
+        <div style="margin-top:6px;font-size:12px;color:${scoreColor}">${signal}</div>
+      </div>`;
+    }).join('');
+  }
+
+  // ── Screenshot Analyzer ──
+  const dropzone = document.getElementById('dropzone');
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) setFile(file);
+  });
+
+  function handleFileSelect(input) {
+    if (input.files[0]) setFile(input.files[0]);
+  }
+
+  function setFile(file) {
+    selectedFile = file;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = document.getElementById('preview-img');
+      img.src = e.target.result;
+      img.style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+    document.getElementById('analyze-btn').disabled = false;
+
+    // Update dropzone text
+    document.querySelector('.dropzone-icon').textContent = '✅';
+    document.querySelector('.dropzone-text').innerHTML = `<strong>${file.name}</strong><br/><span style="font-size:12px;color:var(--muted)">Click to change</span>`;
+  }
+
+  async function analyzeScreenshot() {
+    if (!selectedFile) return;
+
+    const btn = document.getElementById('analyze-btn');
+    const resultsDiv = document.getElementById('analysis-results');
+    btn.disabled = true;
+    btn.textContent = '⏳ Analyzing…';
+
+    resultsDiv.innerHTML = '<div class="explainer"><span class="spinner"></span> Reading screenshot and cross-referencing luck data…</div>';
+
+    try {
+      const formData = new FormData();
+      formData.append('image', selectedFile);
+      formData.append('context', document.getElementById('context-select').value);
+
+      const res = await fetch('/api/analyze-screenshot', { method: 'POST', body: formData });
+      const data = await res.json();
+
+      if (data.error) {
+        resultsDiv.innerHTML = `<div class="error-box">⚠️ ${data.error}</div>`;
+        return;
+      }
+
+      if (!data.success) {
+        resultsDiv.innerHTML = `<div class="error-box">Could not identify players: ${data.message || 'Unknown error'}</div>`;
+        return;
+      }
+
+      // Render player cards
+      const matched = data.matched_players || [];
+      const hasData = matched.some(p => p.stats);
+
+      let html = '';
+
+      if (hasData) {
+        html += '<div class="results-grid">';
+        matched.forEach(p => {
+          if (!p.stats) {
+            html += `<div class="result-card"><div class="rc-name">${p.name} <span class="rc-type">not found in data</span></div><div class="no-match">No luck data available</div></div>`;
+            return;
+          }
+          const score = p.luck_score;
+          const sign = score > 0 ? '+' : '';
+          const scoreColor = score > 0 ? 'var(--lucky)' : 'var(--unlucky)';
+          const pill = p.lucky
+            ? '<span class="pill lucky">Lucky</span>'
+            : (p.unlucky ? '<span class="pill unlucky">Unlucky</span>' : '<span class="pill" style="background:rgba(88,166,255,0.1);color:var(--neutral)">Neutral</span>');
+
+          let statRows = '';
+          const s = p.stats;
+          if (p.type === 'batter') {
+            if (s.woba != null) statRows += `<div class="rc-stat"><span>wOBA</span><span>${s.woba.toFixed(3)}</span></div>`;
+            if (s.xwoba != null) statRows += `<div class="rc-stat"><span>xwOBA</span><span>${s.xwoba.toFixed(3)}</span></div>`;
+          } else {
+            if (s.era != null) statRows += `<div class="rc-stat"><span>ERA</span><span>${s.era.toFixed(2)}</span></div>`;
+            if (s.xera != null) statRows += `<div class="rc-stat"><span>xERA</span><span>${s.xera.toFixed(2)}</span></div>`;
+            if (!s.era && s.woba != null) statRows += `<div class="rc-stat"><span>wOBA allowed</span><span>${s.woba.toFixed(3)}</span></div>`;
+            if (!s.xera && s.xwoba != null) statRows += `<div class="rc-stat"><span>xwOBA allowed</span><span>${s.xwoba.toFixed(3)}</span></div>`;
+          }
+          if (s.pa != null) statRows += `<div class="rc-stat"><span>PA</span><span>${s.pa}</span></div>`;
+
+          html += `<div class="result-card">
+            <div class="rc-name">${p.name} ${pill} <span class="rc-type">${p.type}</span></div>
+            ${statRows}
+            <div class="rc-stat"><span>Luck Score</span><span style="color:${scoreColor};font-weight:600">${sign}${score != null ? score.toFixed(3) : '—'}</span></div>
+          </div>`;
+        });
+        html += '</div>';
+      }
+
+      // Render analysis text (convert **bold** to <strong>)
+      const analysisHtml = data.analysis
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+      html += `<h3 style="font-size:14px;margin-bottom:10px;color:var(--muted)">AI Fantasy Analysis</h3>`;
+      html += `<div class="analysis-text">${analysisHtml}</div>`;
+
+      resultsDiv.innerHTML = html;
+    } catch (err) {
+      resultsDiv.innerHTML = `<div class="error-box">⚠️ Request failed: ${err.message}</div>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Analyze Screenshot';
+    }
+  }
+
+  // ── Init ──
+  loadLuckData();
+</script>
+
+</body>
+</html>
