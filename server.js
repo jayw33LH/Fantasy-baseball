@@ -85,8 +85,16 @@ function parseLine(line) {
 }
 
 function parseCSV(text) {
-  const lines = text.trim().split('\n').filter(Boolean);
-  const headers = parseLine(lines[0]).map(h => h.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''));
+  // Normalize line endings before splitting
+  const lines = text.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(Boolean);
+  const headers = parseLine(lines[0]).map(h =>
+    h.toLowerCase()
+     .replace(/\s+/g, '_')   // spaces → _
+     .replace(/,/g, '_')      // commas → _ (e.g. "last_name, first_name" → "last_name__first_name")
+     .replace(/[^a-z0-9_]/g, '') // strip everything else
+     .replace(/__+/g, '_')    // collapse multiple underscores
+  );
+  console.log('[CSV] headers:', headers.slice(0, 8));
   return lines.slice(1).map(line => {
     const vals = parseLine(line);
     const obj = {};
@@ -103,16 +111,45 @@ const HEADERS = {
   'Referer': 'https://baseballsavant.mlb.com/',
 };
 
-async function fetchSavant(type) {
-  const url = `https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=${type}&year=${YEAR}&position=&team=&min=100&csv=true`;
+async function fetchSavant(type, year = YEAR) {
+  const url = `https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=${type}&year=${year}&position=&team=&min=50&csv=true`;
   const res = await fetch(url, { headers: HEADERS });
-  if (!res.ok) throw new Error(`Savant ${type}: HTTP ${res.status}`);
-  return parseCSV(await res.text());
+  if (!res.ok) throw new Error(`HTTP ${res.status} for ${type}/${year}`);
+  const text = await res.text();
+  console.log(`[savant:${type}/${year}] bytes=${text.length} preview="${text.slice(0, 100).replace(/[\r\n]/g, '↵')}"`);
+  if (!text.trim()) throw new Error(`empty body for ${type}/${year}`);
+  if (text.trim().startsWith('<')) throw new Error(`got HTML instead of CSV for ${type}/${year}`);
+  const rows = parseCSV(text);
+  if (rows.length < 2) throw new Error(`only ${rows.length} rows for ${type}/${year}`);
+  return rows;
+}
+
+// Try current year; fall back to previous year if no data yet
+async function fetchSavantWithFallback(type) {
+  try {
+    return await fetchSavant(type, YEAR);
+  } catch (e) {
+    console.warn(`[savant:${type}] ${YEAR} failed (${e.message}), trying ${YEAR - 1}`);
+    return await fetchSavant(type, YEAR - 1);
+  }
+}
+
+// Robustly extract player name from a CSV row regardless of column layout
+function extractName(r) {
+  const direct = r['last_name_first_name'] || r['last_name__first_name'] || r['player_name'] || r['name'];
+  if (direct && direct.trim()) return direct.trim();
+  const last = r['last_name'] || r['lastname'];
+  const first = r['first_name'] || r['firstname'];
+  if (last && first) return `${last.trim()}, ${first.trim()}`;
+  // Last resort: any key containing "name"
+  const nameKey = Object.keys(r).find(k => k.includes('name') && r[k] && r[k].trim());
+  return nameKey ? r[nameKey].trim() : null;
 }
 
 function toBatterLuck(rows) {
+  if (rows.length) console.log('[batter] columns:', Object.keys(rows[0]));
   return rows.flatMap(r => {
-    const name = r['last_name__first_name'] || (r.last_name && r.first_name ? `${r.last_name}, ${r.first_name}` : null);
+    const name = extractName(r);
     if (!name) return [];
     const woba = parseFloat(r.woba), xwoba = parseFloat(r.est_woba);
     const diff = parseFloat(r.est_woba_minus_woba_diff);
@@ -123,8 +160,9 @@ function toBatterLuck(rows) {
 }
 
 function toPitcherLuck(rows) {
+  if (rows.length) console.log('[pitcher] columns:', Object.keys(rows[0]));
   return rows.flatMap(r => {
-    const name = r['last_name__first_name'] || (r.last_name && r.first_name ? `${r.last_name}, ${r.first_name}` : null);
+    const name = extractName(r);
     if (!name) return [];
     const era = parseFloat(r.p_era ?? r.era), xera = parseFloat(r.xera);
     const woba = parseFloat(r.woba), xwoba = parseFloat(r.est_woba);
@@ -151,7 +189,7 @@ async function getLuckData(forceRefresh = false) {
 
   let batters, pitchers, isDemo = false, demoReason = '';
   try {
-    const [bRows, pRows] = await Promise.all([fetchSavant('batter'), fetchSavant('pitcher')]);
+    const [bRows, pRows] = await Promise.all([fetchSavantWithFallback('batter'), fetchSavantWithFallback('pitcher')]);
     batters = toBatterLuck(bRows);
     pitchers = toPitcherLuck(pRows);
     if (!batters.length && !pitchers.length) throw new Error('Empty response');
@@ -186,6 +224,30 @@ function findPlayer(name, players) {
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
+
+// Debug endpoint — shows raw CSV columns + first 3 rows from Baseball Savant
+app.get('/api/debug', async (req, res) => {
+  try {
+    const dbgType = req.query.type || 'batter';
+    const dbgYear = parseInt(req.query.year) || YEAR;
+    const url = `https://baseballsavant.mlb.com/leaderboard/expected_statistics?type=${dbgType}&year=${dbgYear}&position=&team=&min=50&csv=true`;
+    const r = await fetch(url, { headers: HEADERS });
+    const text = await r.text();
+    const rows = parseCSV(text);
+    res.json({
+      year: dbgYear,
+      status: r.status,
+      bytes: text.length,
+      rowCount: rows.length,
+      columns: rows[0] ? Object.keys(rows[0]) : [],
+      sample: rows.slice(0, 3),
+      rawHeader: text.split('\n')[0],
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/luck-data', async (req, res) => {
   try {
     const data = await getLuckData(req.query.refresh === 'true');
