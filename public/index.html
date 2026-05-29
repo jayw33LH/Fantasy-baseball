@@ -35,7 +35,7 @@
     .exp strong{color:var(--blue)}
     /* Grid */
     .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:24px}
-    @media(max-width:700px){.grid{grid-template-columns:1fr}}
+    @media(max-width:700px){.grid{grid-template-columns:1fr}.paste-grid{grid-template-columns:1fr!important}}
     /* Cards */
     .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
     .ch{padding:11px 15px;border-bottom:1px solid var(--border);font-weight:600;font-size:13px;display:flex;align-items:center;gap:7px}
@@ -110,7 +110,7 @@
   <button class="tb on" onclick="tab('bat',this)">🏏 Batters</button>
   <button class="tb" onclick="tab('pit',this)">⚾ Pitchers</button>
   <button class="tb" onclick="tab('srch',this)">🔍 Search</button>
-  <button class="tb" onclick="tab('ss',this)">📸 Screenshot</button>
+  <button class="tb" onclick="tab('ss',this)">📋 Roster</button>
 </div>
 
 <main>
@@ -149,43 +149,56 @@
     </div>
   </div>
 
-  <!-- SCREENSHOT -->
+  <!-- ROSTER ANALYZER -->
   <div class="tp" id="tp-ss">
     <div class="sec">
-      <h3 style="margin-bottom:10px;font-size:15px">📸 Fantasy Roster Screenshot Analyzer</h3>
-      <p style="color:var(--muted);font-size:13px;margin-bottom:14px">Upload any fantasy screenshot — AI reads the player names and returns real-time luck analysis + actionable advice.</p>
+      <h3 style="margin-bottom:6px;font-size:15px">📋 Roster Luck Analyzer</h3>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:16px">Paste any player names — your roster, free agents, trade targets, or opponent. Luck cards appear instantly; add an API key for full AI advice.</p>
 
-      <div class="dz" id="dz">
-        <input type="file" accept="image/*" onchange="setFile(this.files[0])"/>
-        <div class="dzi">📷</div>
-        <div class="dzt"><strong>Click to upload</strong> or drag & drop<br/>Roster · Free agents · Opponent · Trade targets</div>
-        <img id="prev"/>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px" class="paste-grid">
+        <div>
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:5px">My Roster / Players to check</label>
+          <textarea id="roster-input" placeholder="Paste names here — one per line or comma-separated:
+
+Aaron Judge
+Shohei Ohtani, Freddie Freeman
+Zack Wheeler
+Paul Goldschmidt" style="width:100%;height:160px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:var(--r);padding:10px;font-size:13px;resize:vertical;outline:none;font-family:inherit" oninput="abtn.disabled=!this.value.trim()"></textarea>
+        </div>
+        <div>
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:5px">Free Agents / Trade targets <span style="opacity:.6">(optional)</span></label>
+          <textarea id="fa-input" placeholder="Paste available players here to compare side-by-side:
+
+Luis Robert
+Marcus Stroman
+Jesse Winker" style="width:100%;height:160px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:var(--r);padding:10px;font-size:13px;resize:vertical;outline:none;font-family:inherit"></textarea>
+        </div>
       </div>
 
-      <div class="crow">
-        <label for="ctx">Screenshot is:</label>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+        <label style="font-size:13px;color:var(--muted);white-space:nowrap">These players are:</label>
         <select id="ctx">
-          <option value="my fantasy roster">My Fantasy Roster</option>
-          <option value="available free agents in my fantasy league">Free Agents</option>
+          <option value="my fantasy roster and free agents">My Roster + Free Agents</option>
+          <option value="my fantasy roster">My Roster Only</option>
+          <option value="available free agents in my fantasy league">Free Agents Only</option>
           <option value="an opponent's fantasy roster">Opponent's Roster</option>
-          <option value="players I'm considering trading for">Trade Targets</option>
-          <option value="players I'm considering dropping">Drop Candidates</option>
+          <option value="trade targets I'm evaluating">Trade Targets</option>
         </select>
       </div>
 
-      <div id="akrow">
-        <label for="apikey">Anthropic API Key <span style="color:var(--muted)">(get one free at console.anthropic.com)</span></label>
-        <input type="password" id="apikey" placeholder="sk-ant-…"/>
+      <div id="akrow" style="margin-bottom:12px">
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Anthropic API Key <span style="opacity:.7">(optional — adds AI narrative advice)</span></label>
+        <input type="password" id="apikey" placeholder="sk-ant-… (get one free at console.anthropic.com)" style="width:100%;max-width:420px"/>
       </div>
 
-      <button id="abtn" class="pri" onclick="analyze()" disabled>Analyze Screenshot</button>
+      <button id="abtn" class="pri" onclick="analyze()" disabled>⚡ Analyze Players</button>
       <div id="ares"></div>
     </div>
   </div>
 </main>
 
 <script>
-let batters=[], pitchers=[], sTimer=null, selFile=null;
+let batters=[], pitchers=[], sTimer=null;
 
 function tab(name,btn){
   document.querySelectorAll('.tp').forEach(p=>p.classList.remove('on'));
@@ -276,8 +289,8 @@ function doSearch(q){
   }).join('');
 }
 
-/* ── Anthropic API (browser-side, bypasses StackBlitz server restrictions) ── */
-async function callClaude(apiKey, messages, maxTokens=1000){
+/* ── Anthropic API (called from browser to bypass StackBlitz server limits) ── */
+async function callClaude(apiKey, content, maxTokens=2000){
   const res=await fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{
@@ -286,16 +299,16 @@ async function callClaude(apiKey, messages, maxTokens=1000){
       'anthropic-version':'2023-06-01',
       'anthropic-dangerous-allow-browser':'true',
     },
-    body:JSON.stringify({model:'claude-opus-4-8',max_tokens:maxTokens,messages:[{role:'user',content:messages}]})
+    body:JSON.stringify({model:'claude-opus-4-8',max_tokens:maxTokens,messages:[{role:'user',content}]})
   });
   if(!res.ok){
     const err=await res.json().catch(()=>({}));
-    throw new Error(err.error?.message||`Anthropic API error ${res.status}`);
+    throw new Error(err.error?.message||`Anthropic API returned ${res.status}`);
   }
   return (await res.json()).content[0].text;
 }
 
-/* ── Player matching (client-side) ── */
+/* ── Player matching ── */
 function normN(n){return n.toLowerCase().replace(/[^a-z ]/g,'').trim();}
 function findP(name,list){
   const q=normN(name);
@@ -307,74 +320,102 @@ function findP(name,list){
   return list.find(p=>normN(p.name).includes(q)||q.includes(normN(p.name)))||null;
 }
 
-async function analyze(){
-  if(!selFile)return;
-  const apiKey=document.getElementById('apikey').value.trim();
-  if(!apiKey){document.getElementById('ares').innerHTML='<div class="err">Please enter your Anthropic API key above.</div>';return;}
-  const btn=document.getElementById('abtn');
-  btn.disabled=true;btn.textContent='⏳ Analyzing…';
-  const setStatus=msg=>document.getElementById('ares').innerHTML=`<div style="color:var(--muted);padding:8px 0"><span class="spin"></span>${msg}</div>`;
-  try{
-    const b64=await toBase64(selFile);
-    const mt=selFile.type||'image/png';
-    const ctx=document.getElementById('ctx').value;
-
-    // Step 1: Extract player names from image (browser → Anthropic directly)
-    setStatus('Reading player names from screenshot…');
-    const raw=await callClaude(apiKey,[
-      {type:'image',source:{type:'base64',media_type:mt,data:b64}},
-      {type:'text',text:`This is a screenshot of ${ctx} from a fantasy baseball app.\n\nExtract ALL MLB player names visible. Return ONLY a JSON array, e.g.: ["Mike Trout","Shohei Ohtani"]\n\nReturn only the JSON array.`}
-    ],800);
-
-    const m=raw.match(/\[[\s\S]*?\]/);
-    let names=[];
-    try{names=m?JSON.parse(m[0]):[];}catch{}
-    if(!names.length){document.getElementById('ares').innerHTML=`<div class="err">⚠️ No player names found in screenshot. Raw response: ${raw}</div>`;return;}
-
-    // Step 2: Cross-reference with luck data
-    setStatus(`Found ${names.length} players — cross-referencing luck data…`);
-    const matched=names.map(name=>{
-      const b=findP(name,batters), p=findP(name,pitchers), hit=b||p;
-      const type=b?'batter':p?'pitcher':'unknown';
-      if(!hit)return{name,type,luck_score:null,stats:null};
-      const score=hit.luck_score, thresh=type==='batter'?0.015:0.25;
-      return{name,matchedName:hit.name,type,luck_score:score,lucky:score>thresh,unlucky:score<-thresh,stats:hit};
-    });
-
-    // Step 3: AI fantasy analysis
-    setStatus('Generating fantasy analysis…');
-    const analysis=await callClaude(apiKey,
-      `You are a fantasy baseball analyst specializing in sabermetric luck analysis.\n\nContext: ${ctx}\n\nPlayer luck data:\n${JSON.stringify(matched,null,2)}\n\nLuck guide:\n• Batters: luck = wOBA − xwOBA. Positive = lucky (expect regression, sell high). Negative = unlucky (expect improvement, buy low).\n• Pitchers: luck = xERA − ERA. Positive = lucky (expect regression, fade/sell). Negative = unlucky (expect improvement, stream/buy).\n\nProvide:\n1. **SELL HIGH / FADE** — lucky players to move\n2. **BUY LOW / TARGET** — unlucky players to acquire\n3. **Specific actions** — start/sit, add/drop, trade advice\n\nBe concise, direct, and actionable. Use bullet points.`
-    ,2000);
-
-    // Render results
-    let html='<div class="rg">';
-    matched.forEach(p=>{
-      if(!p.stats){html+=`<div class="rc"><div class="rcn">${p.name} <span class="rct">not found</span></div><div style="color:var(--muted);font-size:12px;font-style:italic">No luck data available</div></div>`;return;}
-      const s=p.luck_score, ip=p.type==='pitcher', sign=s>0?'+':'', sc=s>0?'var(--lucky)':s<0?'var(--unlucky)':'var(--muted)';
-      const pill=p.lucky?'<span class="pill pL">Lucky</span>':p.unlucky?'<span class="pill pU">Unlucky</span>':'<span class="pill" style="background:rgba(88,166,255,.1);color:var(--blue)">Neutral</span>';
-      let rows=ip?
-        `${p.stats.era!=null?`<div class="rcr"><span>ERA</span><span>${p.stats.era.toFixed(2)}</span></div>`:''}${p.stats.xera!=null?`<div class="rcr"><span>xERA</span><span>${p.stats.xera.toFixed(2)}</span></div>`:''}`
-        :`${p.stats.woba!=null?`<div class="rcr"><span>wOBA</span><span>${p.stats.woba.toFixed(3)}</span></div>`:''}${p.stats.xwoba!=null?`<div class="rcr"><span>xwOBA</span><span>${p.stats.xwoba.toFixed(3)}</span></div>`:''}`;
-      if(p.stats.pa)rows+=`<div class="rcr"><span>PA</span><span>${p.stats.pa}</span></div>`;
-      rows+=`<div class="rcr"><span>Luck</span><span style="color:${sc};font-weight:600">${sign}${s.toFixed(ip?2:3)}</span></div>`;
-      html+=`<div class="rc"><div class="rcn">${p.name} ${pill} <span class="rct">${p.type}</span></div>${rows}</div>`;
-    });
-    html+='</div>';
-    const atext=analysis.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\*(.*?)\*/g,'<em>$1</em>');
-    html+=`<h3 style="font-size:13px;margin-bottom:8px;color:var(--muted)">🤖 AI Fantasy Analysis</h3><div class="at">${atext}</div>`;
-    document.getElementById('ares').innerHTML=html;
-  }catch(e){document.getElementById('ares').innerHTML=`<div class="err">⚠️ ${e.message}</div>`;}
-  finally{btn.disabled=false;btn.textContent='Analyze Screenshot';}
+/* ── Parse pasted text into player names ── */
+function parseNames(text){
+  return text.split(/[\n,]+/).map(s=>s.trim()).filter(s=>s.length>2);
 }
 
-function toBase64(file){
-  return new Promise((res,rej)=>{
-    const rd=new FileReader();
-    rd.onload=e=>res(e.target.result.split(',')[1]);
-    rd.onerror=rej;
-    rd.readAsDataURL(file);
+/* ── Build matched player list ── */
+function matchPlayers(names, label){
+  return names.map(name=>{
+    const b=findP(name,batters), p=findP(name,pitchers), hit=b||p;
+    const type=b?'batter':p?'pitcher':'unknown';
+    if(!hit)return{name,label,type,luck_score:null,stats:null};
+    const score=hit.luck_score, thresh=type==='batter'?0.015:0.25;
+    return{name,label,matchedName:hit.name,type,luck_score:score,lucky:score>thresh,unlucky:score<-thresh,stats:hit};
   });
+}
+
+/* ── Render player cards ── */
+function renderCards(matched){
+  if(!matched.length)return'';
+  let html='<div class="rg">';
+  matched.forEach(p=>{
+    if(!p.stats){
+      html+=`<div class="rc"><div class="rcn">${p.name}${p.label?' <span class="rct">('+p.label+')</span>':''}</div><div style="color:var(--muted);font-size:12px;font-style:italic">Not found in database</div></div>`;
+      return;
+    }
+    const s=p.luck_score, ip=p.type==='pitcher', sign=s>0?'+':'', sc=s>0?'var(--lucky)':s<0?'var(--unlucky)':'var(--muted)';
+    const pill=p.lucky?'<span class="pill pL">Lucky</span>':p.unlucky?'<span class="pill pU">Unlucky</span>':'<span class="pill" style="background:rgba(88,166,255,.1);color:var(--blue)">Neutral</span>';
+    let rows=ip?
+      `${p.stats.era!=null?`<div class="rcr"><span>ERA</span><span>${p.stats.era.toFixed(2)}</span></div>`:''}${p.stats.xera!=null?`<div class="rcr"><span>xERA</span><span>${p.stats.xera.toFixed(2)}</span></div>`:''}`
+      :`${p.stats.woba!=null?`<div class="rcr"><span>wOBA</span><span>${p.stats.woba.toFixed(3)}</span></div>`:''}${p.stats.xwoba!=null?`<div class="rcr"><span>xwOBA</span><span>${p.stats.xwoba.toFixed(3)}</span></div>`:''}`;
+    if(p.stats.pa)rows+=`<div class="rcr"><span>PA</span><span>${p.stats.pa}</span></div>`;
+    rows+=`<div class="rcr"><span>Luck Score</span><span style="color:${sc};font-weight:600">${sign}${s.toFixed(ip?2:3)}</span></div>`;
+    const lbl=p.label?` <span class="rct">(${p.label})</span>`:'';
+    html+=`<div class="rc"><div class="rcn">${p.name}${lbl} ${pill} <span class="rct">${p.type}</span></div>${rows}</div>`;
+  });
+  return html+'</div>';
+}
+
+async function analyze(){
+  const rText=document.getElementById('roster-input').value.trim();
+  if(!rText)return;
+  const faText=document.getElementById('fa-input').value.trim();
+  const ctx=document.getElementById('ctx').value;
+  const apiKey=document.getElementById('apikey').value.trim();
+  const btn=document.getElementById('abtn');
+  const ares=document.getElementById('ares');
+  btn.disabled=true; btn.textContent='⚡ Analyzing…';
+
+  // Parse names from both boxes
+  const rNames=parseNames(rText);
+  const faNames=faText?parseNames(faText):[];
+
+  // Cross-reference immediately — no API needed
+  const rMatched=matchPlayers(rNames, faNames.length?'roster':'');
+  const faMatched=matchPlayers(faNames,'available');
+  const allMatched=[...rMatched,...faMatched];
+  const found=allMatched.filter(p=>p.stats);
+
+  // Show cards instantly
+  let html='';
+  if(rMatched.length){
+    if(faMatched.length)html+=`<h4 style="font-size:13px;color:var(--muted);margin-bottom:8px">My Roster</h4>`;
+    html+=renderCards(rMatched);
+  }
+  if(faMatched.length){
+    html+=`<h4 style="font-size:13px;color:var(--muted);margin:14px 0 8px">Available / Targets</h4>`;
+    html+=renderCards(faMatched);
+  }
+  if(!found.length){
+    html+='<div class="err">⚠️ None of these players were found in the luck database. Check spelling or try last name only.</div>';
+    ares.innerHTML=html;
+    btn.disabled=false; btn.textContent='⚡ Analyze Players';
+    return;
+  }
+
+  // AI narrative (only if API key provided)
+  if(apiKey){
+    html+=`<h3 style="font-size:13px;margin:16px 0 8px;color:var(--muted)">🤖 AI Fantasy Analysis <span class="spin"></span></h3>`;
+    ares.innerHTML=html;
+    try{
+      const luckGuide=`Luck guide:\n• Batters: luck = wOBA − xwOBA. Positive = lucky (regress, sell high). Negative = unlucky (improve, buy low).\n• Pitchers: luck = xERA − ERA. Positive = lucky (regress, fade/sell). Negative = unlucky (improve, stream/buy).`;
+      const prompt=`You are a sharp fantasy baseball analyst. Context: ${ctx}.\n\n${luckGuide}\n\nPlayer luck data:\n${JSON.stringify(allMatched,null,2)}\n\nGive me:\n1. **SELL HIGH / FADE** — lucky players I should move or avoid\n2. **BUY LOW / TARGET** — unlucky players I should pick up or trade for\n3. **Specific actions** — concrete start/sit, add/drop, or trade recommendations\n\nBe direct, concise, and actionable. Bullet points only.`;
+      const analysis=await callClaude(apiKey,prompt,2000);
+      const atext=analysis.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\*(.*?)\*/g,'<em>$1</em>');
+      // Replace the loading spinner with the actual analysis
+      html=html.replace('<span class="spin"></span>','');
+      ares.innerHTML=html+`<div class="at">${atext}</div>`;
+    }catch(e){
+      ares.innerHTML=html.replace('<span class="spin"></span>','')+`<div class="err">⚠️ AI analysis failed: ${e.message}</div>`;
+    }
+  } else {
+    html+=`<div style="color:var(--muted);font-size:12px;margin-top:12px;padding:10px;border:1px solid var(--border);border-radius:var(--r)">💡 Add an Anthropic API key above to get AI-generated trade/add/drop recommendations.</div>`;
+    ares.innerHTML=html;
+  }
+
+  btn.disabled=false; btn.textContent='⚡ Analyze Players';
 }
 
 load();
